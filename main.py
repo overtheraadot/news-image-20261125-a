@@ -1,56 +1,59 @@
 #!/usr/bin/env python3
-"""Front Page - Wednesday 25 November 2026: 35 stories, 7 regions.
+"""Entry point for news-image-20261125 (program/v1).
 
-The graded entry is the committed entry.png (drawn by render.py and kept
-in this repo). This program is the only thing the grader runs: it copies
-that image to the output directory byte-for-byte, using the standard
-library alone, so it needs no network, no fonts and no third-party
-packages. The output path honours MAKEFUN_OUTPUT_DIR and otherwise
-defaults to /output/entry.png. The copy is verified by size, and the
-source is checked for the 1 MiB gate and the PNG magic before copying.
+The front page image is committed in this repository as entry.png.
+This program copies it byte-for-byte to the output location the
+grader expects, then checks the copy is a real PNG inside the
+competition's size gate. Standard library only, no network.
 """
 import os
 import shutil
 import sys
-from pathlib import Path
 
-MAX_BYTES = 1_048_576  # 1 MiB size gate for the entry image
-PNG_MAGIC = b"\x89PNG\r\n\x1a\n"  # first 8 bytes of every PNG file
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+MAX_BYTES = 1048576  # 1 MiB: the kit's size gate for entry.png
 
 
-def entry_source() -> Path:
-    """Locate the committed image next to this file and check its size."""
-    here = Path(__file__).resolve().parent
-    image = here / "entry.png"
-    if not image.is_file():
-        raise SystemExit(f"entry image not found: {image}")
-    size = image.stat().st_size
+def die(message):
+    print("error: %s" % message, file=sys.stderr)
+    return 1
+
+
+def check_png(path):
+    """Return an error string, or None when path is a PNG under the gate."""
+    with open(path, "rb") as handle:
+        magic = handle.read(len(PNG_MAGIC))
+    if magic != PNG_MAGIC:
+        return "not a PNG (bad magic bytes)"
+    size = os.path.getsize(path)
     if size > MAX_BYTES:
-        raise SystemExit(f"entry image is {size} bytes, over the 1 MiB gate")
-    with image.open("rb") as handle:
-        if handle.read(len(PNG_MAGIC)) != PNG_MAGIC:
-            raise SystemExit(f"entry image is not a PNG file: {image}")
-    return image
+        return "too large: %d bytes, gate is %d" % (size, MAX_BYTES)
+    return None
 
 
-def output_path() -> Path:
-    """Resolve where the graded image must land."""
-    folder = Path(os.environ.get("MAKEFUN_OUTPUT_DIR") or "/output")
-    folder.mkdir(parents=True, exist_ok=True)
-    return folder / "entry.png"
+def main():
+    base = os.path.dirname(os.path.abspath(__file__))
+    source = os.path.join(base, "entry.png")
+    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
+    dest = os.path.join(out_dir, "entry.png")
 
+    if not os.path.isfile(source):
+        return die("entry.png not found next to main.py: %s" % source)
 
-def publish() -> int:
-    """Copy the committed image to the output directory."""
-    source = entry_source()
-    target = output_path()
-    shutil.copyfile(source, target)
-    copied = target.stat().st_size
-    if copied != source.stat().st_size:
-        raise SystemExit("copied image size differs from the committed image")
-    print(f"copied {source.name} -> {target} ({copied} bytes)")
+    problem = check_png(source)
+    if problem is not None:
+        return die("committed entry.png is unusable: %s" % problem)
+
+    os.makedirs(out_dir, exist_ok=True)
+    shutil.copyfile(source, dest)
+
+    problem = check_png(dest)
+    if problem is not None:
+        return die("copied output is unusable: %s" % problem)
+
+    print("wrote %s (%d bytes, valid PNG)" % (dest, os.path.getsize(dest)))
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(publish())
+    sys.exit(main())
